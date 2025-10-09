@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
@@ -111,6 +112,38 @@ internal sealed class StreamableHttpHandler(
         {
             await session.DisposeAsync();
         }
+    }
+
+    public async Task HandleGetToolCallResultAsync(HttpContext context)
+    {
+        var requestId = context.Request.RouteValues["requestId"]?.ToString();
+
+        if (string.IsNullOrEmpty(requestId))
+        {
+            await WriteJsonRpcErrorAsync(context, "Bad Request: Missing required route parameters", StatusCodes.Status400BadRequest);
+            return;
+        }
+
+        var store = context.RequestServices.GetRequiredService<LongRunningToolOperationStore>();
+        if (!store.OperationExists(requestId))
+        {
+            await WriteJsonRpcErrorAsync(context, "Not Found: Operation not found", StatusCodes.Status404NotFound);
+            return;
+        }
+
+        var result = store.TryGetResult(requestId);
+        if (result == null)
+        {
+            // Still in progress - return 202 Accepted with Location header
+            var location = $"{context.Request.Scheme}://{context.Request.Host}{context.Request.Path}";
+            context.Response.Headers.Location = location;
+            context.Response.StatusCode = StatusCodes.Status202Accepted;
+            return;
+        }
+
+        // Completed - return 200 OK with the result
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        await context.Response.WriteAsJsonAsync(result);
     }
 
     private async ValueTask<StreamableHttpSession?> GetSessionAsync(HttpContext context, string sessionId)

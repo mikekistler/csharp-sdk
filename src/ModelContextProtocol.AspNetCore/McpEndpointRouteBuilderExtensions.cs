@@ -36,6 +36,10 @@ public static class McpEndpointRouteBuilderExtensions
             .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, contentTypes: ["text/event-stream"]))
             .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status202Accepted));
 
+        streamableHttpGroup.MapGet("toolCallResult/{requestId}", streamableHttpHandler.HandleGetToolCallResultAsync)
+            .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status200OK, contentTypes: ["application/json", "text/event-stream"]))
+            .WithMetadata(new ProducesResponseTypeMetadata(StatusCodes.Status202Accepted));
+
         if (!streamableHttpHandler.HttpServerTransportOptions.Stateless)
         {
             // The GET and DELETE endpoints are not mapped in Stateless mode since there's no way to send unsolicited messages
