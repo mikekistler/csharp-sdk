@@ -28,6 +28,7 @@ public static class HttpMcpServerBuilderExtensions
         builder.Services.TryAddSingleton<StatefulSessionManager>();
         builder.Services.TryAddSingleton<StreamableHttpHandler>();
         builder.Services.TryAddSingleton<SseHandler>();
+        builder.Services.TryAddSingleton<ToolCallStateService>();
         builder.Services.AddHostedService<IdleTrackingBackgroundService>();
 
         builder.Services.TryAddEnumerable(ServiceDescriptor.Transient<IPostConfigureOptions<McpServerOptions>, AuthorizationFilterSetup>());
