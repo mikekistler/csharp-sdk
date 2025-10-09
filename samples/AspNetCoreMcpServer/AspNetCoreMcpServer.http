@@ -1,0 +1,72 @@
+@HostAddress = http://localhost:3001
+
+POST {{HostAddress}}/
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-06-18
+
+{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "ping"
+}
+
+###
+
+POST {{HostAddress}}/
+Accept: application/json, text/event-stream
+Content-Type: application/json
+MCP-Protocol-Version: 2025-06-18
+
+{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list"
+}
+
+###
+
+POST {{HostAddress}}/
+Accept: application/json, text/event-stream
+Content-Type: application/json
+
+{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+        "name": "get_forecast",
+        "arguments": {
+            "latitude": 39.0997,
+            "longitude": -94.5786
+        }
+    }
+}
+
+###
+
+POST {{HostAddress}}/
+Accept: application/json, text/event-stream
+Content-Type: application/json
+Mcp-Lro: 921e3862-a9aa-4807-b0a8-23a19ef91a98
+
+{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "tools/call",
+    "params": {
+        "name": "get_forecast",
+        "arguments": {
+            "latitude": 39.0997,
+            "longitude": -94.5786
+        }
+    }
+}
+
+###
+
+@Location = http://localhost:3001/toolCallResult/921e3862-a9aa-4807-b0a8-23a19ef91a98
+
+GET {{Location}}
+MCP-Protocol-Version: 2025-06-18
+Accept: application/json, text/event-stream

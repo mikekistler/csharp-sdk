@@ -174,9 +174,15 @@ internal sealed class StreamableHttpHandler(
             return;
         }
 
-        // Completed - return 200 OK with the result
-        context.Response.StatusCode = StatusCodes.Status200OK;
-        await Results.Json(result, GetRequiredJsonTypeInfo<CallToolResult>()).ExecuteAsync(context);
+        await using var resultStream = await result;
+        if (resultStream is { })
+        {
+            // Completed - return 200 OK with the result
+            context.Response.StatusCode = StatusCodes.Status200OK;
+            context.Response.Headers.ContentType = "application/json";
+            resultStream.Position = 0;
+            await resultStream.CopyToAsync(context.Response.Body, context.RequestAborted);
+        }
     }
 
     private async ValueTask<StreamableHttpSession?> GetSessionAsync(HttpContext context, string sessionId)

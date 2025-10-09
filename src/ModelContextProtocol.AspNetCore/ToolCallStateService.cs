@@ -40,8 +40,8 @@ public sealed class ToolCallStateService
             if (state.Task.IsCompleted)
             {
                 state.CompletedAt ??= DateTimeOffset.UtcNow;
+                return await state.Task;
             }
-            return await state.Task;
         }
         return null;
     }
