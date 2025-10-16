@@ -58,22 +58,13 @@ internal sealed class StreamableHttpPostTransport(StreamableHttpServerTransport 
             yield break;
         }
 
-        if (responseStream is not null)
+        // New path: yield messages directly
+        _sseWriter.MessageFilter = StopOnFinalResponseFilter;
+        await foreach (var sseItem in _sseWriter.ReadMessagesAsync(cancellationToken).ConfigureAwait(false))
         {
-            // Legacy path: write to stream
-            _sseWriter.MessageFilter = StopOnFinalResponseFilter;
-            await _sseWriter.WriteAllAsync(responseStream, cancellationToken).ConfigureAwait(false);
-        }
-        else
-        {
-            // New path: yield messages directly
-            _sseWriter.MessageFilter = StopOnFinalResponseFilter;
-            await foreach (var sseItem in _sseWriter.ReadMessagesAsync(cancellationToken).ConfigureAwait(false))
+            if (sseItem.Data is not null)
             {
-                if (sseItem.Data is not null)
-                {
-                    yield return sseItem.Data;
-                }
+                yield return sseItem.Data;
             }
         }
     }

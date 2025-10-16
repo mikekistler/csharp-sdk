@@ -68,12 +68,8 @@ internal sealed class StreamableHttpHandler(
 
         InitializeSseResponse(context);
 
-        bool wroteResponse = false;
-        await foreach (var responseMessage in session.Transport.HandlePostRequest(message, context.RequestAborted))
-        {
-            wroteResponse = true;
-            await WriteSseMessageAsync(context.Response.Body, responseMessage, context.RequestAborted);
-        }
+        var responseMessages = session.Transport.HandlePostRequest(message, context.RequestAborted);
+        bool wroteResponse = await WriteSseMessageAsync(context.Response.Body, responseMessages, context.RequestAborted);
 
         if (!wroteResponse)
         {
@@ -335,21 +331,19 @@ internal sealed class StreamableHttpHandler(
     private static bool MatchesTextEventStreamMediaType(MediaTypeHeaderValue acceptHeaderValue)
         => acceptHeaderValue.MatchesMediaType("text/event-stream");
 
-    private static async Task WriteSseMessageAsync(Stream responseStream, JsonRpcMessage message, CancellationToken cancellationToken)
+    private static async Task<bool> WriteSseMessageAsync(Stream responseStream, IAsyncEnumerable<JsonRpcMessage> messages, CancellationToken cancellationToken)
     {
-        var sseItem = new SseItem<JsonRpcMessage>(message, SseParser.EventTypeDefault);
+        bool wroteResponse = false;
         await SseFormatter.WriteAsync(
-            ToAsyncEnumerable(sseItem),
+            messages,
             responseStream,
-            // Action<SseItem<T>, IBufferWriter<byte>> formatter,
             (SseItem<JsonRpcMessage> item, IBufferWriter<byte> writer) =>
             {
-                // Probably need to fix this
-                var tempStream = new MemoryStream();
-                JsonSerializer.Serialize(tempStream, item.Data, GetRequiredJsonTypeInfo<JsonRpcMessage>());
-                writer.Write(tempStream.ToArray());
+                writer.Write(JsonSerializer.SerializeToUtf8Bytes(item.Data, GetRequiredJsonTypeInfo<JsonRpcMessage>()));
+                wroteResponse = true;
             },
             cancellationToken);
+        return wroteResponse;
     }
 
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(T item)
