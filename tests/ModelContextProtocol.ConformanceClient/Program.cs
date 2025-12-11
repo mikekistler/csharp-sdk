@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text;
 using System.Web;
-
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Client;
 
 // This program expects the following command-line arguments:
@@ -27,6 +27,11 @@ McpClientOptions options = new()
     }
 };
 
+var consoleLoggerFactory = LoggerFactory.Create(builder =>
+{
+    builder.AddConsole();
+});
+
 var clientTransport = new HttpClientTransport(new()
 {
     Endpoint = new Uri(endpoint),
@@ -40,9 +45,9 @@ var clientTransport = new HttpClientTransport(new()
             ClientName = "ProtectedMcpClient",
         },
     }
-});
+}, loggerFactory: consoleLoggerFactory);
 
-await using var mcpClient = await McpClient.CreateAsync(clientTransport, options);
+await using var mcpClient = await McpClient.CreateAsync(clientTransport, options, loggerFactory: consoleLoggerFactory);
 
 try {
     await mcpClient.PingAsync();
@@ -63,10 +68,11 @@ if (scenario == "tools_call")
         { "a", 5 },
         { "b", 10 }
     });
+    return result.IsError != true ? 0 : 1;
 }
 
 // Exit code 0 on success, 1 on failure
-return result.IsError != true ? 0 : 1;
+return 0;
 
 // Copied from ProtectedMcpClient sample
 static async Task<string?> HandleAuthorizationUrlAsync(Uri authorizationUrl, Uri redirectUri, CancellationToken cancellationToken)
