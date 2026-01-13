@@ -84,6 +84,7 @@ internal sealed partial class SseClientSessionTransport : TransportBase
 
         using var httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, _messageEndpoint);
         StreamableHttpClientSessionTransport.CopyAdditionalHeaders(httpRequestMessage.Headers, _options.AdditionalHeaders, sessionId: null, protocolVersion: null);
+        StreamableHttpClientSessionTransport.AddMcpStandardHeaders(httpRequestMessage.Headers, message);
         var response = await _httpClient.SendAsync(httpRequestMessage, message, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)

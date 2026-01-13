@@ -22,9 +22,6 @@ internal sealed class StreamableHttpHandler(
     IServiceProvider applicationServices,
     ILoggerFactory loggerFactory)
 {
-    private const string McpSessionIdHeaderName = "Mcp-Session-Id";
-    private const string LastEventIdHeaderName = "Last-Event-ID";
-
     private static readonly JsonTypeInfo<JsonRpcMessage> s_messageTypeInfo = GetRequiredJsonTypeInfo<JsonRpcMessage>();
     private static readonly JsonTypeInfo<JsonRpcError> s_errorTypeInfo = GetRequiredJsonTypeInfo<JsonRpcError>();
 
@@ -82,7 +79,7 @@ internal sealed class StreamableHttpHandler(
             return;
         }
 
-        var sessionId = context.Request.Headers[McpSessionIdHeaderName].ToString();
+        var sessionId = context.Request.Headers[McpHttpHeaders.SessionId].ToString();
         var session = await GetSessionAsync(context, sessionId);
         if (session is null)
         {
@@ -171,7 +168,7 @@ internal sealed class StreamableHttpHandler(
 
     public async Task HandleDeleteRequestAsync(HttpContext context)
     {
-        var sessionId = context.Request.Headers[McpSessionIdHeaderName].ToString();
+        var sessionId = context.Request.Headers[McpHttpHeaders.SessionId].ToString();
         if (sessionManager.TryRemove(sessionId, out var session))
         {
             await session.DisposeAsync();
@@ -204,14 +201,14 @@ internal sealed class StreamableHttpHandler(
             return null;
         }
 
-        context.Response.Headers[McpSessionIdHeaderName] = session.Id;
+        context.Response.Headers[McpHttpHeaders.SessionId] = session.Id;
         context.Features.Set(session.Server);
         return session;
     }
 
     private async ValueTask<StreamableHttpSession?> GetOrCreateSessionAsync(HttpContext context)
     {
-        var sessionId = context.Request.Headers[McpSessionIdHeaderName].ToString();
+        var sessionId = context.Request.Headers[McpHttpHeaders.SessionId].ToString();
 
         if (string.IsNullOrEmpty(sessionId))
         {
@@ -244,7 +241,7 @@ internal sealed class StreamableHttpHandler(
                 FlowExecutionContextFromRequests = !HttpServerTransportOptions.PerSessionExecutionContext,
                 EventStreamStore = HttpServerTransportOptions.EventStreamStore,
             };
-            context.Response.Headers[McpSessionIdHeaderName] = sessionId;
+            context.Response.Headers[McpHttpHeaders.SessionId] = sessionId;
         }
         else
         {

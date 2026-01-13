@@ -89,6 +89,7 @@ internal sealed partial class StreamableHttpClientSessionTransport : TransportBa
         };
 
         CopyAdditionalHeaders(httpRequestMessage.Headers, _options.AdditionalHeaders, SessionId, _negotiatedProtocolVersion);
+        AddMcpStandardHeaders(httpRequestMessage.Headers, message);
 
         var response = await _httpClient.SendAsync(httpRequestMessage, message, cancellationToken).ConfigureAwait(false);
 
@@ -135,7 +136,7 @@ internal sealed partial class StreamableHttpClientSessionTransport : TransportBa
         if (rpcRequest.Method == RequestMethods.Initialize && rpcResponseOrError is JsonRpcResponse initResponse)
         {
             // We've successfully initialized! Copy session-id and protocol version, then start GET request if any.
-            if (response.Headers.TryGetValues("Mcp-Session-Id", out var sessionIdValues))
+            if (response.Headers.TryGetValues(McpHttpHeaders.SessionId, out var sessionIdValues))
             {
                 SessionId = sessionIdValues.FirstOrDefault();
             }
@@ -401,12 +402,12 @@ internal sealed partial class StreamableHttpClientSessionTransport : TransportBa
     {
         if (sessionId is not null)
         {
-            headers.Add("Mcp-Session-Id", sessionId);
+            headers.Add(McpHttpHeaders.SessionId, sessionId);
         }
 
         if (protocolVersion is not null)
         {
-            headers.Add("MCP-Protocol-Version", protocolVersion);
+            headers.Add(McpHttpHeaders.ProtocolVersion, protocolVersion);
         }
 
         if (lastEventId is not null)
@@ -444,5 +445,41 @@ internal sealed partial class StreamableHttpClientSessionTransport : TransportBa
     {
         public JsonRpcMessageWithId? Response { get; init; }
         public bool IsNetworkError { get; init; }
+    }
+
+    internal static void AddMcpStandardHeaders(HttpRequestHeaders headers, JsonRpcMessage message)
+    {
+        if (message is not JsonRpcRequest request)
+        {
+            return;
+        }
+
+        // Always add the method header
+        headers.Add(McpHttpHeaders.Method, request.Method);
+
+        // Add method-specific headers based on params
+        switch (request.Method)
+        {
+            case RequestMethods.ToolsCall:
+                if (request.Params?["name"]?.GetValue<string>() is string toolNameStr)
+                {
+                    headers.Add(McpHttpHeaders.ToolName, toolNameStr);
+                }
+                break;
+
+            case RequestMethods.ResourcesRead:
+                if (request.Params?["uri"]?.GetValue<string>() is string resourceUriStr)
+                {
+                    headers.Add(McpHttpHeaders.ResourceUri, resourceUriStr);
+                }
+                break;
+
+            case RequestMethods.PromptsGet:
+                if (request.Params?["name"]?.GetValue<string>() is string promptNameStr)
+                {
+                    headers.Add(McpHttpHeaders.PromptName, promptNameStr);
+                }
+                break;
+        }
     }
 }
