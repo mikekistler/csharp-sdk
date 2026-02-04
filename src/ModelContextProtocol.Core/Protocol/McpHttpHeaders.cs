@@ -17,7 +17,19 @@ public static class McpHttpHeaders
     /// <summary>The negotiated protocol version.</summary>
     public const string ProtocolVersion = "MCP-Protocol-Version";
 
+    /// <summary>The last event ID for SSE stream resumption.</summary>
+    public const string LastEventId = "Last-Event-ID";
+
     // ===== New headers from the HTTP Standardization Proposal =====
+
+    /// <summary>
+    /// The minimum protocol version that requires HTTP header validation.
+    /// </summary>
+    /// <remarks>
+    /// This is a placeholder version for the HTTP Standardization SEP.
+    /// Update this value when the SEP is finalized and assigned a real version.
+    /// </remarks>
+    public const string MinVersionForHeaderValidation = "2026-mm-dd";
 
     /// <summary>The JSON-RPC method being invoked (e.g., "tools/call", "resources/read").</summary>
     public const string Method = "Mcp-Method";

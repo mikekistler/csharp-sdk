@@ -412,4 +412,120 @@ public class MapMcpStreamableHttpTests(ITestOutputHelper outputHelper) : MapMcpT
         Assert.True(wasPostRequest, "POST request was not made");
         Assert.True(wasDeleteRequest, "DELETE request was not made");
     }
+
+    [Fact]
+    public async Task HeaderValidation_WithPlaceholderVersion_RejectsMismatchedMcpMethodHeader()
+    {
+        // This test requires stateful sessions since we need to persist the negotiated version
+        Assert.SkipWhen(Stateless, "Header validation test requires stateful sessions.");
+
+        Builder.Services.AddMcpServer(options =>
+        {
+            options.ProtocolVersion = McpHttpHeaders.MinVersionForHeaderValidation;
+        }).WithHttpTransport(ConfigureStateless).WithTools<EchoHttpContextUserTools>();
+
+        await using var app = Builder.Build();
+        app.MapMcp();
+        await app.StartAsync(TestContext.Current.CancellationToken);
+
+        await using var mcpClient = await ConnectAsync(clientOptions: new()
+        {
+            ProtocolVersion = McpHttpHeaders.MinVersionForHeaderValidation,
+        });
+
+        Assert.Equal(McpHttpHeaders.MinVersionForHeaderValidation, mcpClient.NegotiatedProtocolVersion);
+
+        // Now make a raw HTTP request with a mismatched Mcp-Method header
+        var request = new HttpRequestMessage(HttpMethod.Post, "/")
+        {
+            Content = new StringContent("""{"jsonrpc":"2.0","method":"tools/list","id":1}""", System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
+        request.Headers.Add("mcp-protocol-version", McpHttpHeaders.MinVersionForHeaderValidation);
+        request.Headers.Add(McpHttpHeaders.Method, "prompts/get"); // Wrong method!
+        request.Headers.Add("mcp-session-id", mcpClient.SessionId);
+
+        var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("-32001", content); // HeaderMismatch error code
+    }
+
+    [Fact]
+    public async Task HeaderValidation_WithPlaceholderVersion_AcceptsMatchingMcpMethodHeader()
+    {
+        Assert.SkipWhen(Stateless, "Header validation test requires stateful sessions.");
+
+        Builder.Services.AddMcpServer(options =>
+        {
+            options.ProtocolVersion = McpHttpHeaders.MinVersionForHeaderValidation;
+        }).WithHttpTransport(ConfigureStateless).WithTools<EchoHttpContextUserTools>();
+
+        await using var app = Builder.Build();
+        app.MapMcp();
+        await app.StartAsync(TestContext.Current.CancellationToken);
+
+        await using var mcpClient = await ConnectAsync(clientOptions: new()
+        {
+            ProtocolVersion = McpHttpHeaders.MinVersionForHeaderValidation,
+        });
+
+        Assert.Equal(McpHttpHeaders.MinVersionForHeaderValidation, mcpClient.NegotiatedProtocolVersion);
+
+        // Now make a raw HTTP request with a correct Mcp-Method header
+        var request = new HttpRequestMessage(HttpMethod.Post, "/")
+        {
+            Content = new StringContent("""{"jsonrpc":"2.0","method":"tools/list","id":1}""", System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
+        request.Headers.Add("mcp-protocol-version", McpHttpHeaders.MinVersionForHeaderValidation);
+        request.Headers.Add(McpHttpHeaders.Method, "tools/list"); // Correct method
+        request.Headers.Add("mcp-session-id", mcpClient.SessionId);
+
+        var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task HeaderValidation_WithOlderVersion_AcceptsMismatchedMcpMethodHeader()
+    {
+        // With protocol version 2025-11-25 or earlier, header validation should be skipped
+        Assert.SkipWhen(Stateless, "Header validation test requires stateful sessions.");
+
+        Builder.Services.AddMcpServer(options =>
+        {
+            options.ProtocolVersion = "2025-11-25"; // Last version before header validation required
+        }).WithHttpTransport(ConfigureStateless).WithTools<EchoHttpContextUserTools>();
+
+        await using var app = Builder.Build();
+        app.MapMcp();
+        await app.StartAsync(TestContext.Current.CancellationToken);
+
+        await using var mcpClient = await ConnectAsync(clientOptions: new()
+        {
+            ProtocolVersion = "2025-11-25",
+        });
+
+        Assert.Equal("2025-11-25", mcpClient.NegotiatedProtocolVersion);
+
+        // Now make a raw HTTP request with a mismatched Mcp-Method header (should be ignored)
+        var request = new HttpRequestMessage(HttpMethod.Post, "/")
+        {
+            Content = new StringContent("""{"jsonrpc":"2.0","method":"tools/list","id":1}""", System.Text.Encoding.UTF8, "application/json")
+        };
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
+        request.Headers.Add("mcp-protocol-version", "2025-11-25");
+        request.Headers.Add(McpHttpHeaders.Method, "prompts/get"); // Wrong method, but should be ignored
+        request.Headers.Add("mcp-session-id", mcpClient.SessionId);
+
+        var response = await HttpClient.SendAsync(request, TestContext.Current.CancellationToken);
+
+        // Should succeed because validation is not enforced for versions <= 2025-11-25
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
 }

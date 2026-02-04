@@ -38,6 +38,10 @@ internal sealed partial class McpSessionHandler : IAsyncDisposable
         "2025-03-26",
         "2025-06-18",
         LatestProtocolVersion,
+        // Version 2025-11-25 is the last version before header validation is required
+        "2025-11-25",
+        // Placeholder version for HTTP Standardization SEP - enables header validation in tests
+        McpHttpHeaders.MinVersionForHeaderValidation,
     ];
 
     /// <summary>

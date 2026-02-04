@@ -62,7 +62,11 @@ internal sealed class StreamableHttpHandler(
 
         // Validate MCP headers match the request body values per the HTTP Standardization SEP.
         // Servers MUST reject requests where header values don't match body values.
-        if (message is JsonRpcRequest request)
+        // Header validation is only enforced for protocol versions >= MinVersionForHeaderValidation.
+        // If no protocol version header is present (e.g., initialize request), validation is skipped.
+        var requestProtocolVersion = context.Request.Headers[McpHttpHeaders.ProtocolVersion].ToString();
+        if (message is JsonRpcRequest request &&
+            IsHeaderValidationRequired(requestProtocolVersion))
         {
             var validationError = ValidateMcpHeaders(context.Request.Headers, request);
             if (validationError is not null)
@@ -102,7 +106,7 @@ internal sealed class StreamableHttpHandler(
             return;
         }
 
-        var lastEventId = context.Request.Headers[LastEventIdHeaderName].ToString();
+        var lastEventId = context.Request.Headers[McpHttpHeaders.LastEventId].ToString();
         if (!string.IsNullOrEmpty(lastEventId))
         {
             await HandleResumedStreamAsync(context, session, lastEventId);
@@ -595,6 +599,27 @@ internal sealed class StreamableHttpHandler(
             System.Text.Json.JsonValueKind.Null => null,
             _ => null // Arrays and objects are not supported for headers
         };
+    }
+
+    /// <summary>
+    /// Determines if HTTP header validation is required based on the negotiated protocol version.
+    /// </summary>
+    /// <param name="negotiatedVersion">The negotiated protocol version, or null if not yet negotiated.</param>
+    /// <returns><see langword="true"/> if header validation is required; otherwise, <see langword="false"/>.</returns>
+    /// <remarks>
+    /// Header validation is only required for protocol versions >= <see cref="McpHttpHeaders.MinVersionForHeaderValidation"/>.
+    /// This allows older clients to continue working without sending the new headers.
+    /// </remarks>
+    internal static bool IsHeaderValidationRequired(string? negotiatedVersion)
+    {
+        if (string.IsNullOrEmpty(negotiatedVersion))
+        {
+            return false;
+        }
+
+        // Protocol versions are date-based strings (e.g., "2025-06-18").
+        // String comparison works correctly for ISO date format.
+        return string.CompareOrdinal(negotiatedVersion, McpHttpHeaders.MinVersionForHeaderValidation) >= 0;
     }
 
     private static bool MatchesApplicationJsonMediaType(MediaTypeHeaderValue acceptHeaderValue)
