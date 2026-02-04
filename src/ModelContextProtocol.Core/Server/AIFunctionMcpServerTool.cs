@@ -115,11 +115,14 @@ internal sealed partial class AIFunctionMcpServerTool : McpServerTool
     {
         Throw.IfNull(function);
 
+        // Process the input schema to add x-mcp-header extensions based on McpHeaderAttribute
+        var inputSchema = AddMcpHeaderExtensions(function.JsonSchema, function.UnderlyingMethod);
+
         Tool tool = new()
         {
             Name = options?.Name ?? function.Name,
             Description = GetToolDescription(function, options),
-            InputSchema = function.JsonSchema,
+            InputSchema = inputSchema,
             OutputSchema = CreateOutputSchema(function, options, out bool structuredOutputRequiresWrapping),
             Icons = options?.Icons,
         };
@@ -580,4 +583,100 @@ internal sealed partial class AIFunctionMcpServerTool : McpServerTool
             IsError = allErrorContent && hasAny
         };
     }
+
+    /// <summary>
+    /// Adds x-mcp-header extensions to the JSON schema for parameters with McpHeaderAttribute.
+    /// </summary>
+    /// <param name="schema">The original JSON schema.</param>
+    /// <param name="method">The method info to extract McpHeaderAttribute from parameters.</param>
+    /// <returns>The modified schema with x-mcp-header extensions, or the original if no modifications needed.</returns>
+    private static JsonElement AddMcpHeaderExtensions(JsonElement schema, MethodInfo? method)
+    {
+        if (method is null)
+        {
+            return schema;
+        }
+
+        // Check if any parameters have McpHeaderAttribute
+        var parametersWithHeader = method.GetParameters()
+            .Select(p => (Parameter: p, Attribute: p.GetCustomAttribute<McpHeaderAttribute>()))
+            .Where(x => x.Attribute is not null)
+            .ToList();
+
+        if (parametersWithHeader.Count == 0)
+        {
+            return schema;
+        }
+
+        // Validate header names are unique (case-insensitive)
+        var headerNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (param, attr) in parametersWithHeader)
+        {
+            if (!headerNames.Add(attr!.Name))
+            {
+                throw new ArgumentException(
+                    $"Duplicate x-mcp-header name '{attr.Name}' found on parameter '{param.Name}'. " +
+                    "Header names must be case-insensitively unique within a tool's input schema.");
+            }
+
+            // Validate parameter type is primitive (string, number, boolean)
+            var paramType = Nullable.GetUnderlyingType(param.ParameterType) ?? param.ParameterType;
+            if (!IsPrimitiveType(paramType))
+            {
+                throw new ArgumentException(
+                    $"Parameter '{param.Name}' with McpHeaderAttribute must be a primitive type (string, number, or boolean), " +
+                    $"but was '{param.ParameterType.Name}'.");
+            }
+        }
+
+        // Convert schema to JsonNode for modification
+        var schemaNode = JsonSerializer.SerializeToNode(schema, McpJsonUtilities.JsonContext.Default.JsonElement);
+        if (schemaNode is not JsonObject schemaObj || !schemaObj.TryGetPropertyValue("properties", out var propertiesNode) ||
+            propertiesNode is not JsonObject properties)
+        {
+            return schema;
+        }
+
+        // Build a mapping from parameter name to JSON property name using JsonNamingPolicy
+        // The AIFunctionFactory uses the same naming policy
+        var namingPolicy = JsonNamingPolicy.CamelCase;
+
+        foreach (var (param, attr) in parametersWithHeader)
+        {
+            // Get the JSON property name for this parameter
+            if (param.Name is null)
+            {
+                continue;
+            }
+
+            var jsonPropertyName = namingPolicy.ConvertName(param.Name);
+
+            if (properties.TryGetPropertyValue(jsonPropertyName, out var propertyNode) &&
+                propertyNode is JsonObject propertyObj)
+            {
+                propertyObj["x-mcp-header"] = attr!.Name;
+            }
+        }
+
+        // Convert back to JsonElement
+        return JsonSerializer.Deserialize(schemaNode, McpJsonUtilities.JsonContext.Default.JsonElement);
+    }
+
+    /// <summary>
+    /// Determines if a type is a primitive type suitable for x-mcp-header.
+    /// </summary>
+    private static bool IsPrimitiveType(Type type) =>
+        type == typeof(string) ||
+        type == typeof(bool) ||
+        type == typeof(byte) ||
+        type == typeof(sbyte) ||
+        type == typeof(short) ||
+        type == typeof(ushort) ||
+        type == typeof(int) ||
+        type == typeof(uint) ||
+        type == typeof(long) ||
+        type == typeof(ulong) ||
+        type == typeof(float) ||
+        type == typeof(double) ||
+        type == typeof(decimal);
 }
