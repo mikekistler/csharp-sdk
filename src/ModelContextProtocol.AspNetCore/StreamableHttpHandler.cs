@@ -59,6 +59,21 @@ internal sealed class StreamableHttpHandler(
             return;
         }
 
+        // Validate MCP headers match the request body values per the HTTP Standardization SEP.
+        // Servers MUST reject requests where header values don't match body values.
+        if (message is JsonRpcRequest request)
+        {
+            var validationError = ValidateMcpHeaders(context.Request.Headers, request);
+            if (validationError is not null)
+            {
+                await WriteJsonRpcErrorAsync(context,
+                    validationError,
+                    StatusCodes.Status400BadRequest,
+                    (int)McpErrorCode.HeaderMismatch);
+                return;
+            }
+        }
+
         InitializeSseResponse(context);
         var wroteResponse = await session.Transport.HandlePostRequestAsync(message, context.Response.Body, context.RequestAborted);
         if (!wroteResponse)
@@ -386,6 +401,82 @@ internal sealed class StreamableHttpHandler(
     }
 
     internal static JsonTypeInfo<T> GetRequiredJsonTypeInfo<T>() => (JsonTypeInfo<T>)McpJsonUtilities.DefaultOptions.GetTypeInfo(typeof(T));
+
+    /// <summary>
+    /// Validates that MCP HTTP headers match the corresponding values in the JSON-RPC request body.
+    /// </summary>
+    /// <param name="headers">The HTTP request headers.</param>
+    /// <param name="request">The parsed JSON-RPC request.</param>
+    /// <returns>An error message if validation fails; <see langword="null"/> if validation succeeds.</returns>
+    internal static string? ValidateMcpHeaders(IHeaderDictionary headers, JsonRpcRequest request)
+    {
+        // Validate Mcp-Method header (required for all requests)
+        if (!headers.TryGetValue(McpHttpHeaders.Method, out var methodHeader) || string.IsNullOrEmpty(methodHeader))
+        {
+            return $"Header mismatch: Required header '{McpHttpHeaders.Method}' is missing.";
+        }
+
+        // Method values are case-sensitive per the SEP
+        var methodHeaderValue = methodHeader.ToString().Trim();
+        if (!string.Equals(methodHeaderValue, request.Method, StringComparison.Ordinal))
+        {
+            return $"Header mismatch: {McpHttpHeaders.Method} header value '{methodHeaderValue}' does not match body value '{request.Method}'.";
+        }
+
+        // Validate method-specific headers
+        switch (request.Method)
+        {
+            case RequestMethods.ToolsCall:
+                return ValidateParamHeader(headers, McpHttpHeaders.ToolName, request.Params, "name");
+
+            case RequestMethods.ResourcesRead:
+                return ValidateParamHeader(headers, McpHttpHeaders.ResourceUri, request.Params, "uri");
+
+            case RequestMethods.PromptsGet:
+                return ValidateParamHeader(headers, McpHttpHeaders.PromptName, request.Params, "name");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Validates that a method-specific header matches the corresponding parameter value in the request body.
+    /// </summary>
+    private static string? ValidateParamHeader(IHeaderDictionary headers, string headerName, System.Text.Json.Nodes.JsonNode? requestParams, string paramName)
+    {
+        // Get the expected value from the request body
+        string? expectedValue = null;
+        if (requestParams?[paramName]?.GetValue<string>() is string value)
+        {
+            expectedValue = value;
+        }
+
+        // Get the header value (HTTP parsers trim leading/trailing whitespace)
+        if (!headers.TryGetValue(headerName, out var headerValue) || string.IsNullOrEmpty(headerValue))
+        {
+            if (expectedValue is not null)
+            {
+                return $"Header mismatch: Required header '{headerName}' is missing.";
+            }
+            // Both header and body value are missing/null - this is valid
+            return null;
+        }
+
+        var headerValueStr = headerValue.ToString().Trim();
+
+        if (expectedValue is null)
+        {
+            return $"Header mismatch: {headerName} header is present but no corresponding value exists in the request body.";
+        }
+
+        // Compare values (case-sensitive)
+        if (!string.Equals(headerValueStr, expectedValue, StringComparison.Ordinal))
+        {
+            return $"Header mismatch: {headerName} header value '{headerValueStr}' does not match body value '{expectedValue}'.";
+        }
+
+        return null;
+    }
 
     private static bool MatchesApplicationJsonMediaType(MediaTypeHeaderValue acceptHeaderValue)
         => acceptHeaderValue.MatchesMediaType("application/json");

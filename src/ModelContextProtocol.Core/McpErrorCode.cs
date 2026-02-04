@@ -6,6 +6,22 @@ namespace ModelContextProtocol;
 public enum McpErrorCode
 {
     /// <summary>
+    /// Indicates that HTTP headers do not match the corresponding values in the request body.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This error is returned when the MCP HTTP headers (such as <c>Mcp-Method</c>, <c>Mcp-Tool-Name</c>,
+    /// <c>Mcp-Resource</c>, or <c>Mcp-Prompt-Name</c>) do not match the values in the JSON-RPC request body,
+    /// or when required headers are missing or malformed.
+    /// </para>
+    /// <para>
+    /// Servers MUST reject requests with mismatched headers to prevent clients from manipulating routing
+    /// while executing different operations.
+    /// </para>
+    /// </remarks>
+    HeaderMismatch = -32001,
+
+    /// <summary>
     /// Indicates that the requested resource could not be found.
     /// </summary>
     /// <remarks>
