@@ -929,4 +929,137 @@ public partial class McpServerToolTests
     [JsonSerializable(typeof(int?))]
     [JsonSerializable(typeof(DateTimeOffset?))]
     partial class JsonContext2 : JsonSerializerContext;
+
+    #region McpHeader Schema Generation Tests
+
+    [Fact]
+    public void Create_WithMcpHeaderAttribute_AddsXMcpHeaderExtension()
+    {
+        var tool = McpServerTool.Create(
+            (
+                [McpHeader("Region")] string region,
+                string query
+            ) => "result"
+        );
+
+        var schema = tool.ProtocolTool.InputSchema;
+
+        // Parse the schema to verify x-mcp-header is present
+        var properties = schema.GetProperty("properties");
+        Assert.True(properties.TryGetProperty("region", out var regionProp));
+        Assert.True(regionProp.TryGetProperty("x-mcp-header", out var headerValue));
+        Assert.Equal("Region", headerValue.GetString());
+
+        // Verify the non-header parameter doesn't have x-mcp-header
+        Assert.True(properties.TryGetProperty("query", out var queryProp));
+        Assert.False(queryProp.TryGetProperty("x-mcp-header", out _));
+    }
+
+    [Fact]
+    public void Create_WithMultipleMcpHeaderAttributes_AddsAllExtensions()
+    {
+        var tool = McpServerTool.Create(
+            (
+                [McpHeader("Region")] string region,
+                [McpHeader("TenantId")] string tenantId,
+                string query
+            ) => "result"
+        );
+
+        var schema = tool.ProtocolTool.InputSchema;
+        var properties = schema.GetProperty("properties");
+
+        Assert.True(properties.TryGetProperty("region", out var regionProp));
+        Assert.Equal("Region", regionProp.GetProperty("x-mcp-header").GetString());
+
+        Assert.True(properties.TryGetProperty("tenantId", out var tenantProp));
+        Assert.Equal("TenantId", tenantProp.GetProperty("x-mcp-header").GetString());
+
+        Assert.True(properties.TryGetProperty("query", out var queryProp));
+        Assert.False(queryProp.TryGetProperty("x-mcp-header", out _));
+    }
+
+    [Fact]
+    public void Create_WithDuplicateMcpHeaderNames_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            McpServerTool.Create(
+                (
+                    [McpHeader("Region")] string region1,
+                    [McpHeader("REGION")] string region2  // Case-insensitive duplicate
+                ) => "result"
+            )
+        );
+
+        Assert.Contains("Duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Region", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_WithMcpHeaderOnNonPrimitiveType_ThrowsArgumentException()
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            McpServerTool.Create(
+                (
+                    [McpHeader("Data")] List<string> data  // Non-primitive type
+                ) => "result"
+            )
+        );
+
+        Assert.Contains("primitive type", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Create_WithMcpHeaderOnNumericType_AddsExtension()
+    {
+        var tool = McpServerTool.Create(
+            (
+                [McpHeader("Count")] int count,
+                [McpHeader("Value")] double value
+            ) => "result"
+        );
+
+        var schema = tool.ProtocolTool.InputSchema;
+        var properties = schema.GetProperty("properties");
+
+        Assert.True(properties.TryGetProperty("count", out var countProp));
+        Assert.Equal("Count", countProp.GetProperty("x-mcp-header").GetString());
+
+        Assert.True(properties.TryGetProperty("value", out var valueProp));
+        Assert.Equal("Value", valueProp.GetProperty("x-mcp-header").GetString());
+    }
+
+    [Fact]
+    public void Create_WithMcpHeaderOnBooleanType_AddsExtension()
+    {
+        var tool = McpServerTool.Create(
+            (
+                [McpHeader("Enabled")] bool enabled
+            ) => "result"
+        );
+
+        var schema = tool.ProtocolTool.InputSchema;
+        var properties = schema.GetProperty("properties");
+
+        Assert.True(properties.TryGetProperty("enabled", out var enabledProp));
+        Assert.Equal("Enabled", enabledProp.GetProperty("x-mcp-header").GetString());
+    }
+
+    [Fact]
+    public void Create_WithMcpHeaderOnNullableType_AddsExtension()
+    {
+        var tool = McpServerTool.Create(
+            (
+                [McpHeader("OptionalCount")] int? count
+            ) => "result"
+        );
+
+        var schema = tool.ProtocolTool.InputSchema;
+        var properties = schema.GetProperty("properties");
+
+        Assert.True(properties.TryGetProperty("count", out var countProp));
+        Assert.Equal("OptionalCount", countProp.GetProperty("x-mcp-header").GetString());
+    }
+
+    #endregion
 }
