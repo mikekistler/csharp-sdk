@@ -604,22 +604,22 @@ internal sealed class StreamableHttpHandler(
     /// <summary>
     /// Determines if HTTP header validation is required based on the negotiated protocol version.
     /// </summary>
-    /// <param name="negotiatedVersion">The negotiated protocol version, or null if not yet negotiated.</param>
+    /// <param name="requestProtocolVersion">The negotiated protocol version, or null if not yet negotiated.</param>
     /// <returns><see langword="true"/> if header validation is required; otherwise, <see langword="false"/>.</returns>
     /// <remarks>
     /// Header validation is only required for protocol versions >= <see cref="McpHttpHeaders.MinVersionForHeaderValidation"/>.
     /// This allows older clients to continue working without sending the new headers.
     /// </remarks>
-    internal static bool IsHeaderValidationRequired(string? negotiatedVersion)
+    internal static bool IsHeaderValidationRequired(string? requestProtocolVersion)
     {
-        if (string.IsNullOrEmpty(negotiatedVersion))
+        if (string.IsNullOrEmpty(requestProtocolVersion))
         {
             return false;
         }
 
         // Protocol versions are date-based strings (e.g., "2025-06-18").
         // String comparison works correctly for ISO date format.
-        return string.CompareOrdinal(negotiatedVersion, McpHttpHeaders.MinVersionForHeaderValidation) >= 0;
+        return string.CompareOrdinal(requestProtocolVersion, McpHttpHeaders.MinVersionForHeaderValidation) >= 0;
     }
 
     private static bool MatchesApplicationJsonMediaType(MediaTypeHeaderValue acceptHeaderValue)
