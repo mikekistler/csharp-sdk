@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
+using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.Security.Claims;
@@ -427,7 +428,13 @@ internal sealed class StreamableHttpHandler(
         switch (request.Method)
         {
             case RequestMethods.ToolsCall:
-                return ValidateParamHeader(headers, McpHttpHeaders.ToolName, request.Params, "name");
+                var toolNameError = ValidateParamHeader(headers, McpHttpHeaders.ToolName, request.Params, "name");
+                if (toolNameError is not null)
+                {
+                    return toolNameError;
+                }
+                // Validate custom parameter headers (Mcp-Param-*) for tools/call
+                return ValidateCustomParamHeaders(headers, request.Params);
 
             case RequestMethods.ResourcesRead:
                 return ValidateParamHeader(headers, McpHttpHeaders.ResourceUri, request.Params, "uri");
@@ -476,6 +483,118 @@ internal sealed class StreamableHttpHandler(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Validates custom parameter headers (Mcp-Param-*) against the request body arguments.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This implements lenient validation per the HTTP Standardization SEP:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>If a header is present, it MUST match the corresponding argument value in the body</description></item>
+    /// <item><description>If a header is missing but the argument exists in the body, the request is accepted (lenient mode)</description></item>
+    /// </list>
+    /// <para>
+    /// Base64-encoded values (with <c>=?base64?{value}?=</c> wrapper) are decoded before comparison.
+    /// </para>
+    /// </remarks>
+    private static string? ValidateCustomParamHeaders(IHeaderDictionary headers, System.Text.Json.Nodes.JsonNode? requestParams)
+    {
+        // Get the arguments object from the request body
+        var arguments = requestParams?["arguments"];
+        if (arguments is null || arguments.GetValueKind() != System.Text.Json.JsonValueKind.Object)
+        {
+            // No arguments in body, so no validation needed for Mcp-Param-* headers
+            // If headers are present with no body arguments, that's an error
+            foreach (var header in headers)
+            {
+                if (header.Key.StartsWith(McpHttpHeaders.ParamPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return $"Header mismatch: {header.Key} header is present but no arguments exist in the request body.";
+                }
+            }
+            return null;
+        }
+
+        // Validate each Mcp-Param-* header against the corresponding argument
+        foreach (var header in headers)
+        {
+            if (!header.Key.StartsWith(McpHttpHeaders.ParamPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Extract the parameter name from the header (Mcp-Param-{Name} -> {Name})
+            // Note: We need to find the matching argument in a case-sensitive way since JSON keys are case-sensitive
+            var headerParamName = header.Key.Substring(McpHttpHeaders.ParamPrefix.Length);
+            var headerValue = header.Value.ToString().Trim();
+
+            // Decode Base64 if needed
+            var decodedHeaderValue = Client.McpHeaderEncoder.DecodeValue(headerValue);
+            if (decodedHeaderValue is null && headerValue.StartsWith("=?base64?", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"Header mismatch: {header.Key} contains invalid Base64 encoding.";
+            }
+            decodedHeaderValue ??= headerValue;
+
+            // Find the matching argument in the body
+            // The x-mcp-header name may differ from the JSON property name, so we need to check all arguments
+            // and compare the header value against each one's string representation
+            string? matchingArgName = null;
+            string? matchingArgValue = null;
+
+            foreach (var prop in arguments.AsObject())
+            {
+                // Check if this property name matches the header param name (case-insensitive for header matching)
+                if (string.Equals(prop.Key, headerParamName, StringComparison.OrdinalIgnoreCase))
+                {
+                    matchingArgName = prop.Key;
+                    matchingArgValue = ConvertJsonValueToString(prop.Value);
+                    break;
+                }
+            }
+
+            if (matchingArgName is null)
+            {
+                return $"Header mismatch: {header.Key} header is present but no matching argument exists in the request body.";
+            }
+
+            if (matchingArgValue is null)
+            {
+                return $"Header mismatch: {header.Key} header is present but the argument '{matchingArgName}' is null.";
+            }
+
+            // Compare values (case-sensitive for the actual value)
+            if (!string.Equals(decodedHeaderValue, matchingArgValue, StringComparison.Ordinal))
+            {
+                return $"Header mismatch: {header.Key} header value '{decodedHeaderValue}' does not match body argument '{matchingArgName}' value '{matchingArgValue}'.";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Converts a JSON value to its string representation for header comparison.
+    /// </summary>
+    private static string? ConvertJsonValueToString(System.Text.Json.Nodes.JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        return node.GetValueKind() switch
+        {
+            System.Text.Json.JsonValueKind.String => node.GetValue<string>(),
+            System.Text.Json.JsonValueKind.Number => node.ToJsonString(), // Use raw JSON representation for numbers
+            System.Text.Json.JsonValueKind.True => "true",
+            System.Text.Json.JsonValueKind.False => "false",
+            System.Text.Json.JsonValueKind.Null => null,
+            _ => null // Arrays and objects are not supported for headers
+        };
     }
 
     private static bool MatchesApplicationJsonMediaType(MediaTypeHeaderValue acceptHeaderValue)

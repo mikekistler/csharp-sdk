@@ -21,7 +21,7 @@ namespace ModelContextProtocol.Client;
 /// </list>
 /// </para>
 /// </remarks>
-internal static class McpHeaderEncoder
+public static class McpHeaderEncoder
 {
     /// <summary>
     /// Maximum allowed length for encoded header values in bytes.
