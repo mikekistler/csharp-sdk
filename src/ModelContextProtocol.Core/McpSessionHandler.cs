@@ -29,7 +29,7 @@ internal sealed partial class McpSessionHandler : IAsyncDisposable
         "mcp.server.operation.duration", "MCP request or notification duration as observed on the receiver from the time it was received until the result or ack is sent.");
 
     /// <summary>The latest version of the protocol supported by this implementation.</summary>
-    internal const string LatestProtocolVersion = "2025-11-25";
+    internal const string LatestProtocolVersion = "2026-06-XX";
 
     /// <summary>
     /// All protocol versions supported by this implementation.
@@ -40,6 +40,7 @@ internal sealed partial class McpSessionHandler : IAsyncDisposable
         "2024-11-05",
         "2025-03-26",
         "2025-06-18",
+        "2025-11-25",
         LatestProtocolVersion,
     ];
 

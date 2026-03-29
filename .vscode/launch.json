@@ -1,0 +1,35 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "C#: Conformance Client Debug",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/tests/ModelContextProtocol.ConformanceClient",
+            "args": ["run", "--framework", "net10.0", "auth/resource-mismatch", "http://localhost:3002/mcp"]
+        },
+        {
+            "name": "C#: Conformance Server Debug (.NET 9)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/artifacts/bin/ModelContextProtocol.ConformanceServer/Debug/net9.0/ConformanceServer.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/tests/ModelContextProtocol.ConformanceServer",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        },
+        {
+            "name": "C#: Conformance Client Debug (.NET 10)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/artifacts/bin/ModelContextProtocol.ConformanceClient/Debug/net10.0/ModelContextProtocol.ConformanceClient.dll",
+            "args": ["auth/resource-mismatch", "http://localhost:3002/mcp"],
+            "cwd": "${workspaceFolder}/tests/ModelContextProtocol.ConformanceClient",
+            "stopAtEntry": false,
+            "console": "internalConsole"
+        }
+    ]
+}

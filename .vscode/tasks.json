@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "dotnet",
+			"task": "build /Users/mikekistler/Projects/modelcontextprotocol/csharp-sdk/ModelContextProtocol.ConformanceServer/ModelContextProtocol.ConformanceServer.csproj",
+			"file": "/Users/mikekistler/Projects/modelcontextprotocol/csharp-sdk/ModelContextProtocol.ConformanceServer/ModelContextProtocol.ConformanceServer.csproj",
+			"group": "build",
+			"problemMatcher": [],
+			"label": "dotnet: build /Users/mikekistler/Projects/modelcontextprotocol/csharp-sdk/ModelContextProtocol.ConformanceServer/ModelContextProtocol.ConformanceServer.csproj"
+		}
+	]
+}
