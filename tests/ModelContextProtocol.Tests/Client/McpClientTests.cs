@@ -584,7 +584,7 @@ public class McpClientTests : ClientServerTestBase
     public async Task ReturnsNegotiatedProtocolVersion(string? protocolVersion)
     {
         await using McpClient client = await CreateMcpClientForServer(new() { ProtocolVersion = protocolVersion });
-        Assert.Equal(protocolVersion ?? "2026-06-XX", client.NegotiatedProtocolVersion);
+        Assert.Equal(protocolVersion ?? McpHttpHeaders.MinVersionForStandardHeaders, client.NegotiatedProtocolVersion);
     }
 
     [Fact]
